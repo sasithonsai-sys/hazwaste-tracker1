@@ -2828,6 +2828,7 @@ const OFFICIAL_S=[['S01','ขวดแก้วสารเคมีที่ใ
 
 /* ============================ VIEWS ============================ */
 let view='dash', formType='L01', criteriaQ='', reportMonth=todayISO().slice(0,7);
+let editingId=null;
 
 function render(){
   $('#nav').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.v===view));
@@ -2902,38 +2903,43 @@ function viewDash(){
 /* ---------- Register + Label ---------- */
 function viewReg(){
   const s=LS.get(KEY_S,{});
+  const editing = editingId ? LS.get(KEY_C,[]).find(c=>c.id===editingId) : null;
+  const d = editing || {};
   const groups=['solid','liquid','special'];
-  const opts=groups.map(g=>`<optgroup label="${GROUP_LABEL[g]}">`+CAT.filter(c=>c.g===g).map(c=>`<option value="${c.c}" ${c.c===formType?'selected':''}>${c.c} — ${esc(c.name)}</option>`).join('')+`</optgroup>`).join('');
+  const curType = editing? editing.typeCode : formType;
+  const opts=groups.map(g=>`<optgroup label="${GROUP_LABEL[g]}">`+CAT.filter(c=>c.g===g).map(c=>`<option value="${c.c}" ${c.c===curType?'selected':''}>${c.c} — ${esc(c.name)}</option>`).join('')+`</optgroup>`).join('');
   return `
-  <div class="page-head"><div><h1>🏷️ ลงทะเบียนของเสีย & สร้างฉลาก</h1><p class="muted">เลือกประเภทของเสียตามเกณฑ์คัดแยก ระบบจะออกรหัสและฉลากพร้อม QR ให้อัตโนมัติ</p></div></div>
+  <div class="page-head"><div><h1>${editing?'✏️ แก้ไขรายการของเสีย':'🏷️ ลงทะเบียนของเสีย & สร้างฉลาก'}</h1><p class="muted">${editing?('กำลังแก้ไขรายการ '+esc(editing.code)+' — แก้ข้อมูลแล้วกดบันทึก'):'เลือกประเภทของเสียตามเกณฑ์คัดแยก ระบบจะออกรหัสและฉลากพร้อม QR ให้อัตโนมัติ'}</p></div>
+  ${editing?'<div class="head-actions"><button class="btn ghost" data-act="cancel-edit">✕ ยกเลิกการแก้ไข</button></div>':''}</div>
   <div class="grid2 reg">
     <div class="card">
       <label class="fld"><span>ประเภทของเสีย</span>
-        <select id="f-type">${opts}</select></label>
+        <select id="f-type" ${editing?'disabled':''}>${opts}</select></label>
+      ${editing?`<input type="hidden" id="f-type-hidden" value="${esc(curType)}">`:''}
       <div id="type-info" class="type-info"></div>
       <label class="fld"><span>ชื่อและองค์ประกอบ (ระบุสัดส่วน % ห้ามใช้ตัวย่อ)</span>
-        <textarea id="f-comp" rows="2" placeholder="เช่น กรดซัลฟิวริก (Sulfuric acid) 10%"></textarea></label>
+        <textarea id="f-comp" rows="2" placeholder="เช่น กรดซัลฟิวริก (Sulfuric acid) 10%">${esc(d.composition||'')}</textarea></label>
       <div class="row">
-        <label class="fld"><span>ความจุภาชนะ</span><input id="f-cap" type="number" min="0" step="0.1" value="5"></label>
-        <label class="fld"><span>ปริมาณปัจจุบัน</span><input id="f-cur" type="number" min="0" step="0.1" value="0"></label>
+        <label class="fld"><span>ความจุภาชนะ</span><input id="f-cap" type="number" min="0" step="0.1" value="${d.capacity!=null?d.capacity:5}"></label>
+        <label class="fld"><span>ปริมาณปัจจุบัน</span><input id="f-cur" type="number" min="0" step="0.1" value="${d.current!=null?d.current:0}"></label>
         <label class="fld"><span>หน่วย</span><input id="f-unit" type="text" readonly value="ลิตร"></label>
       </div>
       <div id="cap-warn" class="capwarn"></div>
-      <label class="fld"><span>ผู้ก่อกำเนิด (ผู้รับผิดชอบ)</span><input id="f-gen" type="text" value="${esc(s.gen||'')}"></label>
+      <label class="fld"><span>ผู้ก่อกำเนิด (ผู้รับผิดชอบ)</span><input id="f-gen" type="text" value="${esc(d.generator!=null?d.generator:(s.gen||''))}"></label>
       <div class="row">
-        <label class="fld"><span>ห้องปฏิบัติการ</span><input id="f-lab" type="text" value="${esc(s.lab||'')}"></label>
-        <label class="fld"><span>เบอร์ติดต่อ</span><input id="f-phone" type="text" value="${esc(s.phone||'')}"></label>
+        <label class="fld"><span>ห้องปฏิบัติการ</span><input id="f-lab" type="text" value="${esc(d.lab!=null?d.lab:(s.lab||''))}"></label>
+        <label class="fld"><span>เบอร์ติดต่อ</span><input id="f-phone" type="text" value="${esc(d.phone!=null?d.phone:(s.phone||''))}"></label>
       </div>
       <div class="row">
-        <label class="fld"><span>📍 ตำแหน่งการจัดเก็บ</span><input id="f-zone" type="text" value="${esc(s.zone||'')}" placeholder="เช่น ตู้เก็บของเสีย A ชั้น 2"></label>
-        <label class="fld"><span>🗺️ ผังการจัดเก็บ (โซน)</span><input id="f-map" type="text" value="${esc(s.map||'')}" placeholder="เช่น โซน A-2"></label>
+        <label class="fld"><span>📍 ตำแหน่งการจัดเก็บ</span><input id="f-zone" type="text" value="${esc(d.storageZone!=null?d.storageZone:(s.zone||''))}" placeholder="เช่น ตู้เก็บของเสีย A ชั้น 2"></label>
+        <label class="fld"><span>🗺️ ผังการจัดเก็บ (โซน)</span><input id="f-map" type="text" value="${esc(d.storageMap!=null?d.storageMap:(s.map||''))}" placeholder="เช่น โซน A-2"></label>
       </div>
       <div class="row">
-        <label class="fld"><span>วันที่รับเข้า</span><input id="f-received" type="date" value="${todayISO()}"></label>
-        <label class="fld"><span>วันที่เริ่มบรรจุ</span><input id="f-start" type="date" value="${todayISO()}"></label>
-        <label class="fld"><span>วันที่บรรจุเต็ม</span><input id="f-full" type="date"></label>
+        <label class="fld"><span>วันที่รับเข้า</span><input id="f-received" type="date" value="${esc(d.receivedDate||todayISO())}"></label>
+        <label class="fld"><span>วันที่เริ่มบรรจุ</span><input id="f-start" type="date" value="${esc(d.startDate||todayISO())}"></label>
+        <label class="fld"><span>วันที่บรรจุเต็ม</span><input id="f-full" type="date" value="${esc(d.fullDate||'')}"></label>
       </div>
-      <button class="btn primary block" data-act="save-container">💾 บันทึกและออกฉลาก</button>
+      <button class="btn primary block" data-act="save-container">${editing?'💾 บันทึกการแก้ไข':'💾 บันทึกและออกฉลาก'}</button>
     </div>
     <div class="card label-side">
       <div class="card-title">🖨️ ตัวอย่างฉลาก (พิมพ์บนกระดาษ A4)</div>
@@ -3040,6 +3046,7 @@ function viewList(){
       <td class="ctr ${sl.over?'red':sl.near?'amber':''}">${sl.used==null?'—':sl.used+' ว.'}${sl.over?' ⚠':''}</td>
       <td class="ctr">${ibadge}</td>
       <td class="act">
+        <button class="mini" data-act="edit" data-id="${x.id}">✏️ แก้ไข</button>
         <button class="mini" data-act="fill" data-id="${x.id}">➕ เติม</button>
         <button class="mini" data-act="inspect" data-id="${x.id}">🔍 ตรวจฉลาก</button>
         <button class="mini" data-act="print" data-id="${x.id}">🏷️ ฉลาก</button>
@@ -3352,9 +3359,16 @@ async function cloudPush(silent){
   try{
     const body=JSON.stringify({action:'save', containers:LS.get(KEY_C,[]), incidents:LS.get(KEY_I,[])});
     const r=await fetch(url,{method:'POST', body, headers:{'Content-Type':'text/plain;charset=utf-8'}});
-    const j=await r.json().catch(()=>({ok:r.ok}));
-    if(j.ok!==false){ const s=LS.get(KEY_S,{}); s.lastSync=new Date().toLocaleString('th-TH'); LS.set(KEY_S,s); setSync('อัปโหลดสำเร็จ • '+s.lastSync); if(!silent)toast('อัปโหลดขึ้นคลาวด์แล้ว'); }
-    else setSync('อัปโหลดไม่สำเร็จ');
+    const text=await r.text();
+    let j=null; try{ j=JSON.parse(text); }catch(e){ /* ไม่ใช่ JSON = ไม่สำเร็จ (มักเป็นหน้า login/ข้อผิดพลาดของ Apps Script) */ }
+    if(!r.ok || !j || j.ok!==true){
+      const detail = (j&&j.error) ? j.error : ('HTTP '+r.status+(text?(' — '+text.slice(0,150)):''));
+      setSync('อัปโหลดไม่สำเร็จ: '+detail);
+      if(!silent) toast('อัปโหลดไม่สำเร็จ — ดูรายละเอียดที่สถานะซิงก์ด้านล่าง');
+      return;
+    }
+    const s=LS.get(KEY_S,{}); s.lastSync=new Date().toLocaleString('th-TH'); LS.set(KEY_S,s);
+    setSync('อัปโหลดสำเร็จ • '+s.lastSync); if(!silent)toast('อัปโหลดขึ้นคลาวด์แล้ว');
   }catch(e){ setSync('เชื่อมต่อไม่สำเร็จ: '+e.message); if(!silent)toast('เชื่อมต่อคลาวด์ไม่สำเร็จ'); }
 }
 /* client-side merge (mirror ของ Code.gs): id ใหม่=เพิ่ม, id เดิม=updatedAt ใหม่กว่าชนะ */
@@ -3431,14 +3445,37 @@ function saveContainer(){
   if(!d.composition.trim()){ toast('กรุณากรอกชื่อและองค์ประกอบ'); return; }
   if(d.capacity<=0){ toast('กรุณากรอกความจุภาชนะ'); return; }
   const cs=LS.get(KEY_C,[]);
+  const s=LS.get(KEY_S,{}); s.gen=d.generator; s.lab=d.lab; s.phone=d.phone; s.zone=d.storageZone; s.map=d.storageMap; LS.set(KEY_S,s);
+
+  if(editingId){
+    // แก้ไขรายการเดิม: คงรหัส/ประวัติ/สถานะเดิมไว้ ปรับเฉพาะข้อมูลที่แก้ในฟอร์ม
+    const x=cs.find(c=>c.id===editingId);
+    if(!x){ toast('ไม่พบรายการที่จะแก้ไข'); editingId=null; view='list'; render(); return; }
+    Object.assign(x, {composition:d.composition, capacity:d.capacity, current:d.current, generator:d.generator,
+      lab:d.lab, phone:d.phone, storageZone:d.storageZone, storageMap:d.storageMap,
+      receivedDate:d.receivedDate, startDate:d.startDate, fullDate:d.fullDate});
+    x.updatedAt=nowISO();
+    LS.set(KEY_C,cs);
+    toast('บันทึกการแก้ไขแล้ว: '+x.code);
+    editingId=null; autoSyncMaybe();
+    view='list'; render();
+    return;
+  }
+
   const rec=Object.assign({id:'c'+Date.now(), awaiting:false, disposed:false, createdAt:todayISO(), updatedAt:nowISO(), inspection:null,
     stage:'sorting', stageHistory:[{stage:'sorting', date:todayISO(), by:d.generator}],
     fills: d.current>0?[{date:d.startDate||todayISO(), amount:d.current, by:d.generator}]:[]}, d);
   cs.push(rec); LS.set(KEY_C,cs);
-  const s=LS.get(KEY_S,{}); s.gen=d.generator; s.lab=d.lab; s.phone=d.phone; s.zone=d.storageZone; s.map=d.storageMap; LS.set(KEY_S,s);
   toast('บันทึกแล้ว: '+rec.code);
   printLabel(rec); autoSyncMaybe();
   view='list'; render();
+}
+function editContainer(id){
+  const x=LS.get(KEY_C,[]).find(c=>c.id===id); if(!x)return;
+  editingId=id; formType=x.typeCode; view='reg'; render();
+}
+function cancelEdit(){
+  editingId=null; view='list'; render();
 }
 function fillContainer(id){
   const cs=LS.get(KEY_C,[]), x=cs.find(c=>c.id===id); if(!x)return;
@@ -3612,6 +3649,8 @@ document.addEventListener('click', e=>{
   else if(act==='dispose-central' || act==='edit-dispose') showDisposeModal(id);
   else if(act==='save-dispose') saveDisposeDetails(id);
   else if(act==='del') delContainer(id);
+  else if(act==='edit') editContainer(id);
+  else if(act==='cancel-edit') cancelEdit();
   else if(act==='add-incident') addIncident();
   else if(act==='export') exportData();
   else if(act==='import') importData();
